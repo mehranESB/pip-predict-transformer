@@ -1,4 +1,5 @@
 from .dataset import Dataset
+from .loss import lossFcn
 from ..model.model import create_model
 from pipdet.dataset import PipDataset, CombinedDataset
 import logging
@@ -36,7 +37,9 @@ class Trainer:
         # Load optimizer
         self.optimizer = self.load_optimizer(config)  # Load optimizer
 
-        # self.prepare_to_train()  # prepare essentials to train
+        # prepare essentials to train
+        self.prepare_to_train()
+
         # self.plotter = None  # plotter object to plot training process
 
         # # set random seed for reproducibility
@@ -184,3 +187,53 @@ class Trainer:
             )
 
         return optimizer
+
+    def prepare_to_train(self):
+        """
+        Prepare components required for the training loop.
+
+        This includes setting up DataLoaders, moving the model to the specified device,
+        and initializing the loss function.
+        """
+        # Training device (e.g., CPU or GPU)
+        device_cfg = self.config["train"].get("device", "cpu")
+        if "cuda" in device_cfg and torch.cuda.is_available():
+            self.device = torch.device(device_cfg)
+        else:
+            self.device = torch.device("cpu")
+
+        self.model = self.model.to(self.device)
+        self.logger.info(
+            f"Working device is {self.device} and model has been transferred to {self.device}."
+        )
+
+        # Create DataLoaders
+        self.train_loader = torch.utils.data.DataLoader(
+            self.train_ds,
+            batch_size=self.config["train"].get("batch_size", 32),
+            shuffle=self.config["train"].get("shuffle", True),
+        )
+        self.valid_loader = torch.utils.data.DataLoader(
+            self.valid_ds,
+            batch_size=self.config["train"].get("batch_size", 32),
+            shuffle=False,
+        )
+        self.test_loader = torch.utils.data.DataLoader(
+            self.test_ds,
+            batch_size=self.config["train"].get("batch_size", 32),
+            shuffle=False,
+        )
+
+        # create loss objective
+        self.criterion = lossFcn(self.config["train"].get("loss", {"name": "MSELoss"}))
+
+        # Scheduler (optional)
+        if "scheduler" in self.config["train"]:
+            scheduler_type = self.config["train"]["scheduler"].get("type", "StepLR")
+            scheduler_params = self.config["train"]["scheduler"].get("parameters", {})
+            scheduler_cls = getattr(torch.optim.lr_scheduler, scheduler_type, None)
+            if scheduler_cls is None:
+                raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
+            self.scheduler = scheduler_cls(self.optimizer, **scheduler_params)
+        else:
+            self.scheduler = None

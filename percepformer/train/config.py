@@ -62,4 +62,23 @@ config = {
         "load_from_checkpoint": False,
         "checkpoint_path": None,  # Path to optimizer checkpoint
     },
+    # Training configuration
+    "train": {
+        "device": "cuda",  # Device to train on: 'cuda' or 'cpu'
+        "batch_size": 64,  # Batch size for DataLoaders
+        "shuffle": True,  # Shuffle the training data
+        "scheduler": {
+            "type": "StepLR",  # Scheduler type
+            "parameters": {"step_size": 30, "gamma": 0.1},
+        },
+        "seed": 42,  # random seed for reproducibility
+        "epochs": 50,  # number of itration to train on all data
+        "log_interval": 10,  # interval between verbose on scree in iterations
+        "validate": True,  # Whether to perform validation during training
+        "loss": {
+            "name": "WeightedMSELoss",
+            "param": {"weight_fun": "linear", "C": 0.5, "y0": 0.1},
+        },  # loss type for training
+        "checkpoint_dir": "./DATA/checkpoints",  # Directory to save checkpoints
+    },
 }
