@@ -1,7 +1,9 @@
 from .dataset import Dataset
+from ..model.model import create_model
 from pipdet.dataset import PipDataset, CombinedDataset
 import logging
 from pathlib import Path
+import torch
 
 # Configure the logger
 logging.basicConfig(
@@ -13,6 +15,7 @@ logging.basicConfig(
 
 
 class Trainer:
+
     def __init__(self, config: dict):
         """
         Initializes the Trainer class, loads datasets, the model, and optimizer.
@@ -27,7 +30,9 @@ class Trainer:
         # Load datasets
         self.train_ds, self.valid_ds, self.test_ds = self.load_dataset(config)
 
-        # self.model = self.load_model(config)  # Load model
+        # Load model
+        self.model = self.load_model(config)
+
         # self.optimizer = self.load_optimizer(config)  # Load optimizer
         # self.prepare_to_train()  # prepare essentials to train
         # self.plotter = None  # plotter object to plot training process
@@ -80,3 +85,47 @@ class Trainer:
         test_ds = Dataset(test_ds, cfg)
 
         return train_ds, valid_ds, test_ds
+
+    def load_model(self, config):
+        """
+        Load the model based on the provided configuration.
+
+        Args:
+            config (dict): Configuration dictionary containing model parameters and checkpoint details.
+
+        Returns:
+            nn.Module: The instantiated and optionally pre-trained model.
+        """
+        # Create model from class
+        model = create_model(**config["model"]["parameters"])
+
+        # get number of model parameters
+        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        num_params_in_million = num_params / 1e6  # Convert to millions
+        self.logger.info(f"Model created with {num_params_in_million:.2f}M parameters.")
+
+        # Load from a checkpoint if specified
+        load_from_checkpoint = config["model"].get("load_from_checkpoint", False)
+        checkpoint_path = config["model"].get("checkpoint_path", None)
+
+        if load_from_checkpoint:
+            if not checkpoint_path:
+                raise ValueError(
+                    "Checkpoint path must be provided when load_from_checkpoint is True."
+                )
+
+            checkpoint_path = Path(checkpoint_path)
+            if not checkpoint_path.exists():
+                raise FileNotFoundError(f"Weights path not found: {checkpoint_path}")
+
+            # Load the checkpoint
+            checkpoint = torch.load(checkpoint_path)
+            if "model_state_dict" not in checkpoint:
+                raise KeyError("Checkpoint file does not contain 'model_state_dict'.")
+
+            model.load_state_dict(checkpoint["model_state_dict"])
+            self.logger.info(
+                f"Model weights loaded successfully from {checkpoint_path}"
+            )
+
+        return model
