@@ -15,3 +15,6 @@ __pycache__/
 # Packaging build artifacts
 dist/ 
 *.egg-info/
+
+# all vscode configuration
+.vscode/

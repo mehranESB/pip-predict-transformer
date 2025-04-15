@@ -19,6 +19,7 @@ def mirror_reflect(data: pd.DataFrame, mode: str = "random"):
     """
 
     # Select OHLC and other columns properly (use df[[]] instead of df())
+    time_data = data["TimeStamp"]  # Extract TimeStamp column as pandas series
     ohlc_data = data[["Open", "High", "Low", "Close"]].to_numpy()
     other_data = data[["X", "dist", "hilo", "iter"]].to_numpy()
 
@@ -64,6 +65,9 @@ def mirror_reflect(data: pd.DataFrame, mode: str = "random"):
         np.column_stack([ohlc_data, x, dist, hilo, iteration]),
         columns=["Open", "High", "Low", "Close", "X", "dist", "hilo", "iter"],
     )
+
+    # Add the TimeStamp column back to the transformed data
+    transformed_data["TimeStamp"] = time_data  # Re-attach the original TimeStamp column
 
     return transformed_data
 
