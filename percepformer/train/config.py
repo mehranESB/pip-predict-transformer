@@ -46,4 +46,20 @@ config = {
         # Flag to indicate if the model should learn to sort iteration
         "learn_to_sort": False,  # Default: False
     },
+    # Optimizer configuration
+    "optimizer": {
+        # Type of optimizer: Adam, SGD, etc.
+        "type": "Adam",  # Default optimizer type
+        # Parameters for the optimizer
+        "parameters": {
+            "lr": 0.001,  # Learning rate
+            "betas": (0.9, 0.999),  # Beta parameters for Adam
+            "eps": 1e-08,  # Epsilon value
+            "weight_decay": 0.0,  # Weight decay (L2 regularization)
+            "amsgrad": False,  # Use AMSGrad variant of Adam
+        },
+        # Load optimizer from checkpoint
+        "load_from_checkpoint": False,
+        "checkpoint_path": None,  # Path to optimizer checkpoint
+    },
 }

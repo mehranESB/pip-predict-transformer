@@ -33,7 +33,9 @@ class Trainer:
         # Load model
         self.model = self.load_model(config)
 
-        # self.optimizer = self.load_optimizer(config)  # Load optimizer
+        # Load optimizer
+        self.optimizer = self.load_optimizer(config)  # Load optimizer
+
         # self.prepare_to_train()  # prepare essentials to train
         # self.plotter = None  # plotter object to plot training process
 
@@ -129,3 +131,56 @@ class Trainer:
             )
 
         return model
+
+    def load_optimizer(self, config):
+        """
+        Initializes the optimizer for training based on the configuration.
+        Optionally loads the optimizer state from a checkpoint.
+
+        Args:
+            config (dict): Configuration dictionary containing optimizer settings.
+
+        Returns:
+            torch.optim.Optimizer: Initialized optimizer instance.
+        """
+        # Extract optimizer type and parameters
+        optimizer_type = config["optimizer"].get(
+            "type", "Adam"
+        )  # Default to Adam if not specified
+        optimizer_params = config["optimizer"].get(
+            "parameters", {"lr": 0.001}
+        )  # Default parameters
+
+        # Map optimizer type to the corresponding PyTorch optimizer
+        optimizer_cls = getattr(torch.optim, optimizer_type, None)
+        if optimizer_cls is None:
+            raise ValueError(f"Unsupported optimizer type: {optimizer_type}")
+
+        # Instantiate the optimizer
+        optimizer = optimizer_cls(self.model.parameters(), **optimizer_params)
+        self.logger.info(
+            f"Optimizer of type {type(optimizer).__name__} successfully initialized."
+        )
+
+        # Check if optimizer should be loaded from a checkpoint
+        if config["optimizer"].get("load_from_checkpoint", False):
+            checkpoint_path = Path(config["optimizer"].get("checkpoint_path", ""))
+            if not checkpoint_path.exists():
+                raise FileNotFoundError(
+                    f"Optimizer checkpoint not found: {checkpoint_path}"
+                )
+
+            # Load checkpoint
+            checkpoint = torch.load(checkpoint_path)
+            if "optimizer_state_dict" not in checkpoint:
+                raise KeyError(
+                    f"'optimizer_state_dict' not found in checkpoint at {checkpoint_path}"
+                )
+
+            # Load optimizer state
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.logger.info(
+                f"Optimizer state loaded from checkpoint at: {checkpoint_path}"
+            )
+
+        return optimizer
