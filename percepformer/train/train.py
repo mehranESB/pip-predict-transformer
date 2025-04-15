@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 import random
 import numpy as np
+from .visual import TrainingPlotter
 
 # Configure the logger
 logging.basicConfig(
@@ -272,3 +273,176 @@ class Trainer:
             self.scheduler = scheduler_cls(self.optimizer, **scheduler_params)
         else:
             self.scheduler = None
+
+    def train(self):
+        """
+        Main training loop for the model.
+
+        This includes iterating over epochs, training on batches, and optionally validating the model.
+        """
+        num_epochs = self.config["train"].get("epochs", 10)
+        log_interval = self.config["train"].get("log_interval", 10)
+        validate = self.config["train"].get("validate", True)
+
+        # initialize iteration step
+        iteration = 0
+        self.plotter = TrainingPlotter()  # initialize plotter
+        minimum_valid_loss = float("inf")  # store best validation loss ever
+
+        for epoch in range(num_epochs):
+            self.model.train()  # Set the model to training mode
+            running_loss = 0.0
+
+            for batch_idx, batch in enumerate(self.train_loader):
+
+                inputs = batch["inputs"].to(self.device)
+                targets = self.prepare_target(batch)
+
+                # Forward pass
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
+
+                # Backward pass and optimization
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                running_loss += loss.item()
+                iteration += 1
+
+                if batch_idx % log_interval == 0:
+                    self.plotter.update(iteration, train_loss=loss.item())
+                    self.logger.info(
+                        f"Epoch [{epoch + 1}/{num_epochs}], Step [{batch_idx}/{len(self.train_loader)}], Loss: {loss.item():.4f}"
+                    )
+
+            # Average loss for the epoch
+            epoch_loss = running_loss / len(self.train_loader)
+            self.logger.info(
+                f"Epoch [{epoch + 1}/{num_epochs}] Training Loss: {epoch_loss:.4f}"
+            )
+
+            # Validation step
+            if validate:
+                valid_loss = self.validate()
+                self.plotter.update(iteration, val_loss=valid_loss)
+                minimum_valid_loss = (
+                    valid_loss
+                    if valid_loss < minimum_valid_loss
+                    else minimum_valid_loss
+                )
+
+            # save all data and plot of losses
+            self.save_checkpoint(epoch)
+            self.save_plot(epoch)
+
+            # Step scheduler if available
+            if self.scheduler:
+                self.scheduler.step()
+                self.logger.info(
+                    f"Learning rate adjusted to {self.optimizer.param_groups[0]['lr']} using the scheduler."
+                )
+
+        # close traiing process figure
+        self.plotter.close_fig()
+
+        # returning best validation loss
+        return minimum_valid_loss
+
+    def prepare_target(self, batch):
+        """
+        Prepare the target tensor for training, based on whether
+        we're performing learning-to-rank (LTR) or standard regression.
+
+        Args:
+            batch (dict): Batch dictionary containing input tensors.
+
+        Returns:
+            target (Tensor): Prepared target tensor, on the correct device.
+        """
+
+        if self.config["model"].get("learn_to_sort", False):  # Learning-to-rank mode
+            # Get indices that would sort each row in descending order
+            iteration = batch["iter"]
+            target = torch.argsort(iteration, dim=1, descending=True)
+
+        else:  # Regression or metric-based mode
+
+            # "dist" contains a distance or score, and "hilo" indicates direction (0: low, 1: high)
+            dist = batch["dist"]  # shape: [batch_size, n_items]
+            hilo = batch["hilo"]  # binary tensor: 0 or 1
+
+            # apply direction-aware transformation
+            target = dist * (2.0 * hilo - 1.0)
+
+        # Move target to correct device (e.g., GPU)
+        return target.to(self.device)
+
+    def validate(self):
+        """
+        Perform validation on the validation dataset.
+        """
+
+        self.logger.info("Starting validation loss computation.")
+        self.model.eval()  # Set the model to evaluation mode
+        validation_loss = 0.0
+
+        with torch.no_grad():
+            for inputs, targets in self.valid_loader:
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
+
+                # Forward pass
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, targets)
+
+                validation_loss += loss.item()
+
+        # Average validation loss
+        validation_loss /= len(self.valid_loader)
+        self.logger.info(f"Validation Loss: {validation_loss:.4f}")
+
+        return validation_loss
+
+    def save_checkpoint(self, epoch):
+        """
+        Save the model, optimizer, and configuration to a checkpoint file.
+
+        Args:
+            epoch (int): The current epoch.
+        """
+        checkpoint = {
+            "epoch": epoch,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "config": self.config,
+        }
+
+        checkpoint_dir = Path(
+            self.config["train"].get("checkpoint_dir", "./checkpoints")
+        )
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        checkpoint_path = checkpoint_dir / f"checkpoint_epoch_{epoch}.pth"
+        torch.save(checkpoint, checkpoint_path)
+        self.logger.info(f"Checkpoint saved at {checkpoint_path}")
+
+    def save_plot(self, epoch):
+        """
+        save plot of training process.
+        """
+
+        # flag to save losses as json file at the end of training
+        num_epochs = self.config["train"].get("epochs", 10)
+        json_save = True if epoch >= (num_epochs - 1) else False
+
+        # save and close
+        checkpoint_dir = Path(
+            self.config["train"].get("checkpoint_dir", "./checkpoints")
+        )
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        save_path = checkpoint_dir / f"loss_plot_epoch_{epoch}.png"
+        self.plotter.save_plot(save_path, json_save=json_save)
+
+        self.logger.info(
+            f"Plot of training process for epoch {epoch} has been saved at {save_path}."
+        )
