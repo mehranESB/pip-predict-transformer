@@ -5,6 +5,8 @@ from pipdet.dataset import PipDataset, CombinedDataset
 import logging
 from pathlib import Path
 import torch
+import random
+import numpy as np
 
 # Configure the logger
 logging.basicConfig(
@@ -28,6 +30,9 @@ class Trainer:
 
         self.config = config  # Store the configuration
 
+        # set random seed for reproducibility
+        self.set_seed()
+
         # Load datasets
         self.train_ds, self.valid_ds, self.test_ds = self.load_dataset(config)
 
@@ -42,8 +47,38 @@ class Trainer:
 
         # self.plotter = None  # plotter object to plot training process
 
-        # # set random seed for reproducibility
-        # self.set_seed()
+    def set_seed(self):
+        """
+        Set the random seed for all relevant libraries to ensure reproducibility.
+        This affects:
+        - Python's random module
+        - NumPy
+        - PyTorch (CPU and CUDA)
+        """
+
+        # Retrieve the seed from the config, defaulting to 42 if not provided
+        seed = self.config["train"].get("seed", 42)
+
+        # Set the random seed for Python's random library
+        random.seed(seed)
+
+        # Set the random seed for NumPy
+        np.random.seed(seed)
+
+        # Set the random seed for PyTorch (CPU)
+        torch.manual_seed(seed)
+
+        # Set the random seed for CUDA (if using GPU)
+        torch.cuda.manual_seed(seed)
+
+        # Set the random seed for all GPUs (if using multiple GPUs)
+        torch.cuda.manual_seed_all(seed)
+
+        # Ensure deterministic behavior in CUDA (to maintain reproducibility)
+        torch.backends.cudnn.deterministic = True
+
+        # Disable cuDNN auto-tuner to ensure deterministic results (can affect performance)
+        torch.backends.cudnn.benchmark = False
 
     def load_dataset(self, config):
         """
