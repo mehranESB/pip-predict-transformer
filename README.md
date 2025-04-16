@@ -81,6 +81,16 @@ df_results = detector(df_sample)
 
 📁 For more information and full examples, check the `example/` folder.
 
+## 🧠 Available Models
+
+We provide three pretrained models of varying sizes and capacities. Each model has been trained on pip point distance prediction using OHLC data, and evaluated with validation loss as a performance metric:
+
+| Model  | Parameters | Validation Loss | Checkpoint |
+|--------|------------|------------------|------------|
+| **Small**  | ~336K      | 5.6 × 10⁻²       | [Download](https://drive.google.com/uc?export=download&id=1FGso_V19ZxWDbNFHCxxV3NrZh4auDJ30) | 
+| **Medium** | ~1M        | 4.5 × 10⁻²       | [Download](https://drive.google.com/uc?export=download&id=1fPUzB8B0XuuDAS21ty4OSsOWDvzuDK_n) | 
+| **Large**  | ~2.7M      | 3.4 × 10⁻²       | [Download](https://drive.google.com/uc?export=download&id=1v4SHS28EhBM3-L_HhHzmFpGbB9Sw1Bte) | 
+
 ## 🤝 Contributing
 Contributions are welcome and appreciated!
 
