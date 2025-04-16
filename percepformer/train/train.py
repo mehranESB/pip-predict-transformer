@@ -102,7 +102,7 @@ class Trainer:
         update_data = {
             "seq_len": getattr(ds, "seq_len"),
             "norm_width": getattr(ds, "norm_width"),
-            "norm_height": getattr(ds, "seq_len"),
+            "norm_height": getattr(ds, "norm_height"),
         }
         self.config["data"].update({"dataset": update_data})
 
