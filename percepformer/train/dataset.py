@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset as torch_Dataset
 from ..utils.transform import mirror_reflect, add_uniform_score
+import numpy as np
 
 
 class Dataset(torch_Dataset):
@@ -32,8 +33,14 @@ class Dataset(torch_Dataset):
             pip_data = add_uniform_score(pip_data, **param)
 
         # extract data that are necessary for process
-        input_data = pip_data[["Open", "High", "Low", "Close", "X"]].to_numpy()
-        target_data = pip_data[["dist", "hilo", "iter", "udist"]].to_numpy()
+        input_data = (
+            pip_data[["Open", "High", "Low", "Close", "X"]]
+            .to_numpy()
+            .astype(np.float32)
+        )
+        target_data = (
+            pip_data[["dist", "hilo", "iter", "udist"]].to_numpy().astype(np.float32)
+        )
 
         retrive_data = {
             "input": input_data,

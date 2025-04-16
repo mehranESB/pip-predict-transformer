@@ -6,6 +6,7 @@ import torch.nn.functional as F
 class MSELoss(nn.Module):
     def __init__(self):
         super(MSELoss, self).__init__()
+        self.mse = nn.MSELoss(reduction="mean")
 
     def forward(self, predict: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
@@ -18,7 +19,7 @@ class MSELoss(nn.Module):
         Returns:
             torch.Tensor: Scalar tensor representing MSE loss.
         """
-        return torch.mean((predict - target) ** 2)
+        return self.mse(predict, target)
 
 
 class WeightedMSELoss(nn.Module):

@@ -235,7 +235,7 @@ class OutputProjectionLayer(nn.Module):
         # Apply linear transformation
         x = self.fc(x)
         # Apply activation
-        if self.self.ltr:
+        if self.ltr:
             x = x.squeeze(-1)  # not necessary for activation
         else:
             x = F.tanh(x).squeeze(-1)

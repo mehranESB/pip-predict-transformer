@@ -75,7 +75,7 @@ config = {
         "epochs": 50,  # number of itration to train on all data
         "log_interval": 10,  # interval between verbose on scree in iterations
         "validate": True,  # Whether to perform validation during training
-        "loss": {
+        "MSELoss": {
             "name": "WeightedMSELoss",
             "param": {"weight_fun": "linear", "C": 0.5, "y0": 0.1},
         },  # loss type for training

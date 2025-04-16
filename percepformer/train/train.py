@@ -295,7 +295,7 @@ class Trainer:
 
             for batch_idx, batch in enumerate(self.train_loader):
 
-                inputs = batch["inputs"].to(self.device)
+                inputs = batch["input"].to(self.device)
                 targets = self.prepare_target(batch)
 
                 # Forward pass
@@ -368,12 +368,12 @@ class Trainer:
 
         else:  # Regression or metric-based mode
 
-            # "dist" contains a distance or score, and "hilo" indicates direction (0: low, 1: high)
-            dist = batch["dist"]  # shape: [batch_size, n_items]
+            # "udist" contains a uniforemed distance or score, and "hilo" indicates direction (0: low, 1: high)
+            udist = batch["udist"]  # shape: [batch_size, n_items]
             hilo = batch["hilo"]  # binary tensor: 0 or 1
 
             # apply direction-aware transformation
-            target = dist * (2.0 * hilo - 1.0)
+            target = udist * (2.0 * hilo - 1.0)
 
         # Move target to correct device (e.g., GPU)
         return target.to(self.device)
@@ -388,8 +388,10 @@ class Trainer:
         validation_loss = 0.0
 
         with torch.no_grad():
-            for inputs, targets in self.valid_loader:
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+            for batch in self.valid_loader:
+
+                inputs = batch["input"].to(self.device)
+                targets = self.prepare_target(batch)
 
                 # Forward pass
                 outputs = self.model(inputs)
