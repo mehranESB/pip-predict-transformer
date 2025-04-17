@@ -1,54 +1,22 @@
-# Data Preprocessing Guide
+# Data Preprocessing
 
-This guide explains how to preprocess raw financial data for training the model. The preprocessing involves normalizing data to match a trader's perspective, ensuring compatibility with the PIP detection process. Below are the detailed steps.
+This document explains how to preprocess raw financial data for training the model. The preprocessing involves normalizing data to match a trader's perspective, ensuring compatibility with the PIP detection process. Below are the detailed steps.
 
-## Normalizing Data
+## 📍 PIP Point Generation with `pipdet`
 
-To make the data visually intuitive and consistent, it is normalized in both the x (time) and y (price) axes. This normalization ensures the data aligns with a trader's eye view, with a fixed width and height. The normalization process is illustrated with an example.
+In this project, we use the [`pipdet`](https://github.com/mehranESB/chart-pip-detector.git) library to extract Perceptually Important Points (PIPs) from market chart data. This process creates `.pkl` files that include all the necessary information required for training the model.
 
-### Example Code for Normalization
+For our training process, we focus on three key features for each detected pip point:
 
-Here’s a step-by-step example of how to normalize data:
+- `dist`: The distance of the pip point from its associated segment. This is the main value our model learns to predict.
+
+- `hilo`: A binary flag indicating whether the pip point is the high (1.0) or low (0.0) of the corresponding candle.
+
+- `iter`: The iteration step in which the point was detected as a pip — this can help analyze the detection process over time.
+
+You can generate pip data using code example as below:
 ```python
-from multitimeprep.utils import csv as csv_utils
-from multitimeprep.dataset import SingleDataset
-from percepformer.utils.transform import tight_box_normalize
-from pathlib import Path
-
-# Import source DataFrame
-csv_source_path = Path("./DATA/csv/EURUSD-15m.csv")
-df_source = csv_utils.import_ohlcv_from_csv(
-    csv_source_path, header=True, datetime_format="%Y-%m-%d %H:%M:%S"
-)
-
-# Create dataset and fetch a sample
-dataset = SingleDataset(df_source, 128)  # 128 defines the number of data points per sample
-sample_data = dataset[100]  # Fetch the 100th sample
-
-# Normalize the sample data with 
-normalized_data = tight_box_normalize(sample_data, width=1.6, height=1.0)
-```
-
-`sample_data` is the original OHLCV (Open, High, Low, Close, Volume) data extracted from CSV files, and `normalized_data` is the scaled version of `sample_data` after applying `tight_box_normalize`, fitting it into a consistent visual format. 
-
-![normalized_data](../images/normalized.png)
-
-Above is a visual comparison of raw data and normalized data for better understanding.
-
-## PIP Point Information Generation
-
-To identify and extract perceptually important points (PIP) from the normalized data, we use the `FastPip` class from the `percepformer.utils.pip` module. The `FastPip` class computes various PIP feature informations of points iteratively, continuing this process until all points are evaluated (Normalization is applied automatically to the data).
-
-The following features are generated for each point:
-- `iter`: Indicating how many times `FastPip` iterates till consider the point as PIP point.
-- `hilo`: This feature indicates whether the point represents a High (1.0) or Low (0.0) price of the bar, reflecting its perceptual importance from a trader's perspective.
-- `dist`: The distance of the PIP point from its segment, calculated using the perpendicular method. This helps quantify how far the point is from the line connecting adjacent data points.
-- **Other Features:** The FastPip class also computes additional features and other geometrical properties to provide a comprehensive understanding of each point's importance.
-
-These features, along with the market data, are saved into `.pkl` files, allowing for easy access when creating the dataset.
-### Example Code for Generating PIP Points
-```python 
-from percepformer.dataset.pipgen import generate_pip
+from pipdet.pipgen import generate_pip
 from pathlib import Path
 
 # Path to the CSV file containing the market OHLCV data
@@ -56,135 +24,126 @@ csv_path = Path("./DATA/csv/EURUSD-1h.csv")
 
 # Path where the generated PIP data will be saved (in .pkl format)
 save_path = Path("./DATA/pip/EURUSD-1h.pkl")
+save_path.parent.mkdir(parents=True, exist_ok=True)
 
 # Generate the PIP points and distances
-generate_pip(csv_path, seq_len=128, inc_index=20,
-             dist_method="perpendicular", save_path=save_path)
+generate_pip(csv_path,
+    pip_info_to_save=["dist", "hilo", "iter"], # Choose which PIP info to save for each point
+    seq_len=128, # Sequence length of each OHLC segment window
+    inc_index=20, # Step size to move forward in the OHLC data for next sample (how far to slide the window for generating the next sample)
+    dist_method="perpendicular", # Method used to calculate distance from a segment (default is 'perpendicular')
+    save_path=save_path,
+)
 ```
 
-- `seq_len=128`: Specifies the sequence length for the ohlc data in each sample.
-- `inc_index=20`: Defines the index increment to get next sample in dataset for generating PIP points.
-- `dist_method="perpendicular"`: Chooses the distance calculation method for determining how far each point is from its segment.
-- `save_path`: The location where the generated `.pkl` file will be saved.
-
-The generated `.pkl` file will contain the PIP point features and the corresponding market data for further training steps.
+The figure below shows a sample result of pip point detection using `pipdet`. In this example, pip points with a `dist` value less than 0.1 have been filtered out, leaving only the more perceptually significant ones.
 
 ![visualize_pip_points](../images/pip_visualize.png)
 
-The figure above shows the result of identifying PIP points, where points are filtered out if their `dist` feature is lower than 0.1.
+## 📐 Data Normalization
 
-## Creating and Combining Datasets
+To make the data visually intuitive and consistent, it is normalized along both the **x-axis (time)** and **y-axis (price)**. This step ensures the chart segments align with a trader’s eye view — maintaining a **fixed width and height** so that perceptual importance is not distorted by scale or volatility.
 
-Once the PIP point information is generated and saved into `.pkl` files, the next step is to create dataset objects that can be used for training, validation, and testing. This can be done using the `PipDataset` class, which automatically loads the dataset from the provided `.pkl` files. Multiple datasets can also be combined into a single dataset for broader data access during training.
+> ✅ **Note:**  
+> When using the `pipdet` dataset or generating training data through our pipeline, normalization is **automatically applied**.  
+> Additionally, the **inference pipeline includes normalization internally**, so there's **no need to normalize data manually** during prediction.
 
-### `PipDataset`
-
-The `PipDataset` class loads a `.pkl` file containing PIP point data and prepares it for training. This object allows for easy access to PIP points and associated features.
-
-### `CombinedDataset`
-
-If you want to merge multiple `PipDataset` objects, you can use the `CombinedDataset` class. This class combines datasets into a single unified dataset, which is especially useful when you want to use data from different time frames or different market data sources.
-
-### Example Code for Creating and Combining Datasets
+However, for better understanding of the process, we’ve included an example snippet below that demonstrates how normalization works, along with a visual result of the transformation.
 ```python
-from percepformer.dataset.dataset import PipDataset, CombinedDataset
-from pathlib import Path
+from chartDL.utils import csv as csv_utils
+from pipdet.utils import tight_box_normalize_df
 
-# Define the paths to the .pkl files containing PipDatasets
-pkl_path1 = Path("./DATA/pip/EURUSD-1h.pkl")
-pkl_path2 = Path("./DATA/pip/EURUSD-15m.pkl")
+# Import source DataFrame and get a sample from source
+csv_source_path = Path("./DATA/csv/EURUSD-15m.csv")
+df_source = csv_utils.import_ohlcv_from_csv(
+    csv_source_path, header=True, datetime_format="%Y-%m-%d %H:%M:%S"
+)
+df_sample = df_source.iloc[:128]
 
-# Load the PipDatasets
-dataset1 = PipDataset(pkl_path1)  # Load the first PipDataset
-dataset2 = PipDataset(pkl_path2)  # Load the second PipDataset
-
-# Combine the PipDatasets into a single CombinedDataset
-# Merge datasets for unified management
-combined_dataset = CombinedDataset([dataset1, dataset2])
-
-# Split the combined dataset into training (80%), validation (15%), and testing (5%)
-# Assumes the `split` method of CombinedDataset is implemented
-train_ds, valid_ds, test_ds = combined_dataset.split(0.8, 0.15)
+# Normalize the sample data 
+normalized_data = tight_box_normalize_df(df_sample, width=1.6, height=1.0)
 ```
 
-### Dataset Splitting
+The figure below shows how a segment is transformed after normalization preserving its perceptual structure while aligning it to a consistent coordinate space:
 
-Both `CombinedDataset` and `PipDataset` class also support dataset splitting. You can easily split the combined dataset into training, validation, and testing sets, as shown in the example. The split method divides the data based on the provided percentages (in our example: 80% for training, 15% for validation, and 5% for testing).
+![normalized_data](../images/normalized.png)
 
-## Data Augmentation: Mirror Reflection
 
-To enhance the dataset and increase its size, we apply data augmentation during the training process. One of the augmentation techniques used is mirror reflection, which reflects the market data along one or both axes (horizontal, vertical, or both). This technique allows the model to learn from more varied patterns by effectively generating new market data.
+## 🔁 Data Augmentation: Mirror Reflection
 
-When using the mirror_reflect transformation, we can choose between different modes:
-- **Horizontal Reflection:** Reflects the data along the vertical axis.
-- **Vertical Reflection:** Reflects the data along the horizontal axis.
-- **Vertical-Horizontal Reflection:** Reflects the data along both vertical and horizontal axes.
-- **Random Mode:** Randomly selects between horizontal, vertical, both and no-change reflections for each data sample.
+To enhance the dataset and improve generalization during training, we apply **data augmentation** using the **mirror reflection** technique. This strategy helps the model learn from more diverse chart patterns by synthetically generating variations of the original data.
 
-By applying the random mode, the dataset becomes four times larger, as each data point can be transformed in any of the four configurations (original, horizontally reflected, vertically reflected, and both). This random augmentation helps improve the model's robustness by providing a wider variety of market data during training.
+The **mirror reflection** method reflects market data segments along one or both axes. This is applied during the training pipeline and has the effect of multiplying the variety of data patterns the model sees. The possible reflection modes are:
 
-### Example Code for Mirror Reflection Augmentation
+- **Horizontal Reflection:** Flips the data along the vertical axis.
+
+- **Vertical Reflection:** Flips the data along the horizontal axis.
+
+- **Vertical-Horizontal Reflection:** Applies both reflections simultaneously.
+
+- **Random Mode:** Randomly applies one of the above (or no reflection) to each data sample.
+
+> ✅ When using the **random mode**, each sample has 4 possible variations (original, horizontal, vertical, both), effectively **increasing the dataset size by 4x**. This randomness makes the model more robust and better at generalizing to unseen patterns.
+
+Here's a simple example of applying the mirror_reflect transformation:
 ```python
-from percepformer.dataset.dataset import PipDataset
 from percepformer.utils.transform import mirror_reflect
+from pipdet.dataset import PipDataset
 from pathlib import Path
 
-# Define the path to the dataset
+# Path to the preprocessed PIP dataset (in .pkl format)
 pkl_path = Path("./DATA/pip/EURUSD-1h.pkl")
 
-# Define transformations
-T = [lambda x: mirror_reflect(x, mode="random")]  # Random mirror reflection
+# Load the dataset and retrieve a sample at index 100
+ds = PipDataset(pkl_path)
+df_sample = ds[100]  # This is a single (normalized) OHLC segment with pip info
 
-# Create PipDataset instance with transformations
-dataset = PipDataset(pkl_path, transforms=T)
+# Apply mirror reflection transformation
+# mode="random" randomly chooses one of the four modes: none, horizontal, vertical, or both
+mirror_reflected_sample = mirror_reflect(df_sample, mode="random")
 ```
 
-In this example:
--   The `mirror_reflect` transformation is applied with the `"random"` mode, so the dataset will randomly reflect data along either axis (horizontal, vertical, both or none).
--   The dataset is then loaded using the `PipDataset` class, with the transformations included.
-
-This augmentation ensures that the dataset is larger and more diverse, leading to better generalization during training. 
+The figure below shows how one market segment looks under each transformation.
 
 ![mirror_reflection](../images/mirror_reflect.png)
 
-The figure above illustrates the market data after all transformations (including mirror reflections) have been applied. PIP points are overlaid on the data, with the size of each scatter point varying based on its importance. 
+## 🎯 Transforming Target `dist` Feature to `udist` for Learning
 
-## Transforming Target Feature for Learning
+The raw dist values in our dataset are highly **imbalanced** — most are clustered close to zero. This creates difficulties when training regression models using common loss functions like **Mean Squared Error (MSE)**, which assume a more balanced distribution of targets.
 
-In this project, we focus on learning the perceptual importance of PIP points. Among the features generated for PIP points, the `dist` feature plays a crucial role as it represents the importance of each point. This feature is treated as the score that the model aims to predict.
+To overcome this, we transform the `dist` values into a new feature called `udist` (uniform distance) using a statistical method. This transformation helps the model learn more effectively by making the target distribution more uniform.
 
-### Addressing Imbalanced Distribution
+### 🔄 Transformation Process
 
-The raw `dist` values are often heavily imbalanced, with the majority of points having values close to zero. This imbalance poses a challenge for regression tasks, as using losses like Mean Squared Error (MSELoss) may lead to poor learning performance. To address this, we transform the `dist` values into a more balanced distribution.
+- **1. Fit a Generalized Extreme Value (GEV) Distribution:**
 
-### Transformation Process
+    The distribution of the dist values is modeled using a **GEV distribution**, which is well-suited for data with heavy tails (like extreme pip points).
 
-1. **Fitting a Generalized Extreme Value (GEV) Distribution:**
-    The `dist` values are modeled using a GEV distribution, which effectively captures the tail-heavy nature of the data.
-2. **Applying the Cumulative Distribution Function (CDF):**
-    The fitted GEV distribution's CDF is applied to the `dist` values, transforming them into a uniform distribution ranging from 0 to 1. This transformation balances the target scores, making them more suitable for training.
-3. **Inverse Transformation After Training:**
-    Once the model is trained, the predicted scores (transformed by the CDF) are mapped back to the original scale of `dist` by applying the inverse CDF function of the GEV distribution. This step ensures that the results are interpretable in terms of the original feature space.
-    
-### Setting Up GEV Parameters for Training
+- **2. Apply the Cumulative Distribution Function (CDF):**
 
-Before training the model, it is essential to compute the parameters of the Generalized Extreme Value (GEV) distribution for the `dist` feature. These parameters will be used to configure the target transformation for better learning performance. Use the `dist_GEV_param` function to calculate the parameters from your prepared datasets. Below is an example script:
-```python 
-from percepformer.dataset.pipgen import dist_GEV_param
+    After fitting the GEV, we use its CDF to map dist values to a new space — the result is a **uniform distribution between 0 and 1**, which is easier for the model to learn from.
 
-# Define the paths to the .pkl files containing PipDatasets
-pkl_path1 = "./DATA/pip/EURUSD-15m.pkl"
-pkl_path2 = "./DATA/pip/EURUSD-30m.pkl"
-pkl_path3 = "./DATA/pip/EURUSD-1h.pkl"
+- **3. Invert After Training:**
 
-path_list = [pkl_path1, pkl_path2, pkl_path3]
+    Once the model has been trained and produces predictions in the [0, 1] range, we use the **inverse CDF of the fitted GEV** to map predictions back to the original `dist` scale. This ensures that outputs remain meaningful and interpretable.
 
-# Calculate GEV distribution parameters
-_, mu, sigma, xi = dist_GEV_param(path_list, sample_num=10_000, apply_transform=True)
+### ⚙️ Setting Up GEV Parameters for Training
+
+Before training begins, you need to compute the GEV distribution parameters from your training dataset like example below. The resulting parameters should be added to your training `config` under the `data transformation` section. This enables automatic application of the `dist → udist` transformation during training, and `udist → dist` inversion after prediction.
+```python
+from percepformer.utils.dataset import dist_GEV_param, 
+from pathlib import Path
+
+# List of paths to your .pkl files
+pkl_files = [
+    Path("./DATA/pip/EURUSD-15m.pkl"),
+    Path("./DATA/pip/EURUSD-30m.pkl"),
+    Path("./DATA/pip/EURUSD-1h.pkl"),
+]
+
+# Fit the GEV distribution using the provided function
+dists, mu, sigma, xi = dist_GEV_param(pkl_files, sample_num=5000)
 ```
-
-The calculated values of `mu`, `sigma`, and `xi` (location, scale, and shape parameters) should be added to the training configuration. This ensures that the transformed target scores are properly scaled and uniform, facilitating efficient training.
+The figure below illustrates the transformation of the target `dist` values. On the left, you see the original distribution of dist — heavily skewed with many values near zero. On the right, the transformed values `udist`(CDF(`dist`)), derived from applying the **GEV cumulative distribution function**, are spread uniformly between 0 and 1.
 
 ![cdf_transform](../images/score_distribution.png)
-
-The figure above illustrates the distribution of the original scores (`dist`) and their normalized counterparts (CDF(`dist`)) after applying the Generalized Extreme Value (GEV) cumulative distribution function.
