@@ -2,7 +2,7 @@
 
 This project aims to identify Perceptually Important Points (PIP) in financial charts, such as stock market prices, using a Transformer-based deep learning model. The workflow integrates key components to detect and interpret PIP points efficiently.
 
-![Distance explained](images/predVStarget.png)
+![Distance explained](images/predVStargetScore.png)
 
 ##  📄 Project Description
 
