@@ -28,13 +28,14 @@ The `"train"` section defines parameters related to the training process itself.
     "shuffle": True,  
     "scheduler": {
             ...
-        }
-    },
+    }
     "seed": 42,  
     "epochs": 50,  
     "log_interval": 10,  
-    "loss_weight_fcn": "1.0",
     "validate": True,  
+    "loss": {
+            ...
+    }
     "checkpoint_dir": "./DATA/checkpoints",  
 }
 ```
@@ -47,8 +48,8 @@ The `"train"` section defines parameters related to the training process itself.
 | `seed`            | Random seed for ensuring reproducibility.                                 |
 | `epochs`          | Total number of training epochs.                                          |
 | `log_interval`    | Interval (in iterations) for logging metrics during training.             |
-| `loss_weight_fcn` | the string of function to return weight for mse loss in specific score.             |
 | `validate`        | Whether to validate the model after each epoch.                           |
+| `loss`            | Learning rate loss function configuration. See below for details.         |
 | `checkpoint_dir`  | Directory to save training checkpoints.                                   |
 
 ### Scheduler Configuration
@@ -67,6 +68,24 @@ The `"scheduler"` field defines the learning rate adjustment strategy during tra
 |-------------------|-----------------------------------------------------------------------------|
 | `type`            | Scheduler type (e.g., StepLR, CosineAnnealingLR).                          |
 | `parameters`      | Arguments specific to the chosen scheduler.                                |
+
+### Loss function Configuration
+
+The `"loss"` field defines the loss function configuration as training objective. Example:
+```python
+"loss": {
+    "name": "WeightedMSELoss",
+    "param": {
+        "weight_fun": "linear",
+        "C": 0.5,
+        "y0": 0.1
+    }
+}
+```
+| Field             | Description                                                                 |
+|-------------------|-----------------------------------------------------------------------------|
+| `name`            | The class name of loss function .                                           |
+| `param`           | Input parameters for loss function specified by name. check `percepformer/train/loss.py`.                                |
 
 ## 2. Optimizer Configuration
 
@@ -111,7 +130,8 @@ The "model" section defines the architecture of the model. Example:
         "dropout": 0.1,
     },
     "load_from_checkpoint": False,
-    "checkpoint_path": None
+    "checkpoint_path": None,
+    "learn_to_sort": False,
 }
 ```
 | Field             | Description                                                                 |
@@ -119,6 +139,7 @@ The "model" section defines the architecture of the model. Example:
 |`parameters`	    | Hyperparameters for building the model.                             |
 |`load_from_checkpoint` |	Whether to initialize weights from a pretrained checkpoint.   |
 |`checkpoint_path`  | Path to the checkpoint file (if applicable).                        |
+|`learn_to_sort`    | Indicate the output is used for learning to rank (not used in our project).                        |
 
 ## 4. Dataset Configuration
 
@@ -129,9 +150,9 @@ The `"data"` section specifies dataset paths, transformations, and splits. Examp
         "./DATA/pip/EURUSD-1h.pkl",
         "./DATA/pip/EURUSD-15m.pkl",
     ],
-    "transformation": [
+    "transformation": {
             ...
-    ],
+    },
     "train_ratio": 0.8,   
     "valid_ratio": 0.15,  
 }
@@ -139,7 +160,7 @@ The `"data"` section specifies dataset paths, transformations, and splits. Examp
 | Field             | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 |`pkl_pathes`	    | List of paths to .pkl files containing the dataset.     |
-|`transformation`	| List of transformations applied to the dataset.         |
+|`transformation`	| Dict of transformations applied to the dataset.         |
 |`train_ratio`	    | Proportion of the dataset used for training.            |
 |`valid_ratio`	    | Proportion of the dataset used for validation.          |
 
@@ -147,24 +168,18 @@ The `"data"` section specifies dataset paths, transformations, and splits. Examp
 
 Transformations augment the dataset to improve model generalization. Example:
 ```python
-"transformation": [
-    {
-        "name": "mirror_reflect",
-        "param": {"mode": "random"}
+"transformation": {
+    "mirror_reflect": {"mode": "random"},
+    "add_uniform_score": {
+                "mu": 0.0235822,  # Location parameter for GEV distribution
+                "sigma": 0.0227505,  # Scale parameter for GEV distribution
+                "xi": 0.652834,  # Shape parameter for GEV distribution
     },
-    {
-        "name": "add_uniform_score",
-        "param": {
-            "mu": 0.0235822,
-            "sigma": 0.0227505,
-            "xi": 0.652834
-        }
-    }
-]
+}
 ```
 | Field             | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 |`mirror_reflect`	| Reflects the data horizontally, vertically, or both, based on the mode parameter. |
 |`add_uniform_score` | Adds transformed scores to the dataset based on GEV distribution parameters (`mu`, `sigma`, `xi`). |
 
-This configuration file is flexible and allows users to customize their training pipeline easily for different datasets and model architectures.
+> ✅ **Note:**   This configuration file is flexible and allows users to customize their training pipeline easily for different datasets and model architectures.
